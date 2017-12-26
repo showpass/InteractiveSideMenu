@@ -162,10 +162,6 @@ extension MenuInteractiveTransition {
             if self.present {
                 fromViewController.view.isHidden = false
                 contentSnapshotView.removeFromSuperview()
-
-                if let panRecognizer = self.panRecognizer {
-                    contentSnapshotView.addGestureRecognizer(panRecognizer)
-                }
                 if let tapRecognizer = self.tapRecognizer {
                     contentSnapshotView.addGestureRecognizer(tapRecognizer)
                 }
