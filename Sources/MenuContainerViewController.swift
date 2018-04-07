@@ -23,8 +23,23 @@ import UIKit
  */
 open class MenuContainerViewController: UIViewController {
 
-    // Describes if side menu is shown or not.
-    var isShown = false
+    open override var preferredStatusBarStyle: UIStatusBarStyle {
+        return currentContentViewController?.preferredStatusBarStyle ?? .lightContent
+    }
+
+    fileprivate weak var currentContentViewController: UIViewController?
+    fileprivate var navigationMenuTransitionDelegate: MenuTransitioningDelegate!
+
+    /**
+     Flag indicating if the side menu is being shown.
+     */
+    fileprivate var isShown = false
+
+    public var currentItemOptions = SideMenuItemOptions() {
+        didSet {
+            navigationMenuTransitionDelegate?.currentItemOptions = currentItemOptions
+        }
+    }
 
     /**
      The view controller for side menu.
@@ -58,6 +73,56 @@ open class MenuContainerViewController: UIViewController {
      */
     public var contentViewControllers = [UIViewController]()
 
+
+    // MARK: - Controller lifecycle
+    //
+    override open func viewDidLoad() {
+        super.viewDidLoad()
+
+        let interactiveTransition = MenuInteractiveTransition(
+            currentItemOptions: currentItemOptions,
+            presentAction: { [unowned self] in
+                self.presentNavigationMenu()
+            },
+            dismissAction: { [unowned self] in
+                self.dismissNavigationMenu()
+            }
+        )
+
+        navigationMenuTransitionDelegate = MenuTransitioningDelegate(interactiveTransition: interactiveTransition)
+
+        let screenEdgePanRecognizer = UIScreenEdgePanGestureRecognizer(
+            target: navigationMenuTransitionDelegate.interactiveTransition,
+            action: #selector(MenuInteractiveTransition.handlePanPresentation(recognizer:))
+        )
+
+        screenEdgePanRecognizer.edges = .left
+        view.addGestureRecognizer(screenEdgePanRecognizer)
+    }
+
+    override open func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
+        super.viewWillTransition(to: size, with: coordinator)
+
+        let viewBounds = CGRect(x:0, y:0, width:size.width, height:size.height)
+        let viewCenter = CGPoint(x:size.width/2, y:size.height/2)
+        coordinator.animate(alongsideTransition: { _ in
+            if self.menuViewController == nil {
+                fatalError("Invalid `menuViewController` value. It should not be nil")
+            }
+            self.menuViewController.view.bounds = viewBounds
+            self.menuViewController.view.center = viewCenter
+            self.view.bounds = viewBounds
+            self.view.center = viewCenter
+            if self.isShown {
+                self.hideSideMenu()
+            }
+        }, completion: nil)
+    }
+}
+
+// MARK: - Public
+extension MenuContainerViewController {
+
     /**
      Shows left side menu.
      */
@@ -83,58 +148,23 @@ open class MenuContainerViewController: UIViewController {
             if currentContentVC != selectedContentVC {
                 currentContentVC.view.removeFromSuperview()
                 currentContentVC.removeFromParentViewController()
+
                 setCurrentView(selectedContentVC)
             }
         } else {
             setCurrentView(selectedContentVC)
         }
     }
+}
 
-    // MARK: - Controller lifecycle
-    //
-    override open func viewDidLoad() {
-        super.viewDidLoad()
-
-        navigationMenuTransitionDelegate = MenuTransitioningDelegate(interactiveTransition: MenuInteractiveTransition(
-            presentAction: { [unowned self] in
-                self.presentNavigationMenu()
-            },
-            dismissAction: { [unowned self] in
-                self.dismissNavigationMenu()
-            }
-        ))
-    }
-
-    override open func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
-        super.viewWillTransition(to: size, with: coordinator)
-
-        let viewBounds = CGRect(x:0, y:0, width:size.width, height:size.height)
-        let viewCenter = CGPoint(x:size.width/2, y:size.height/2)
-        coordinator.animate(alongsideTransition: { _ in
-            if self.menuViewController == nil {
-                fatalError("Invalid `menuViewController` value. It should not be nil")
-            }
-            self.menuViewController.view.bounds = viewBounds
-            self.menuViewController.view.center = viewCenter
-            self.view.bounds = viewBounds
-            self.view.center = viewCenter
-            if self.isShown {
-                self.hideSideMenu()
-            }
-        }, completion: nil)
-    }
-
-    // MARK: - Private
-    //
-    private weak var currentContentViewController: UIViewController?
-    private var navigationMenuTransitionDelegate: MenuTransitioningDelegate!
-
+// MARK: - Private
+fileprivate extension MenuContainerViewController {
     /**
      Adds proper content view controller as a child.
 
      - parameter selectedContentVC: The view controller to be added.
      */
-    private func setCurrentView(_ selectedContentVC: UIViewController) {
+    func setCurrentView(_ selectedContentVC: UIViewController) {
         addChildViewController(selectedContentVC)
         view.addSubviewWithFullSizeConstraints(view: selectedContentVC.view)
         currentContentViewController = selectedContentVC
@@ -143,7 +173,7 @@ open class MenuContainerViewController: UIViewController {
     /**
      Presents left side menu.
      */
-    private func presentNavigationMenu() {
+    func presentNavigationMenu() {
         if menuViewController == nil {
             fatalError("Invalid `menuViewController` value. It should not be nil")
         }
@@ -154,7 +184,7 @@ open class MenuContainerViewController: UIViewController {
     /**
      Dismisses left side menu.
      */
-    private func dismissNavigationMenu() {
+    func dismissNavigationMenu() {
         self.dismiss(animated: true, completion: nil)
         isShown = false
     }
@@ -169,7 +199,10 @@ extension UIView {
         view.translatesAutoresizingMaskIntoConstraints = false
         insertSubview(view, at: atIndex)
 
-        addConstraints(NSLayoutConstraint.constraints(withVisualFormat: "V:|[view]|", options: NSLayoutFormatOptions(), metrics: nil, views: ["view": view]))
-        addConstraints(NSLayoutConstraint.constraints(withVisualFormat: "H:|[view]|", options: NSLayoutFormatOptions(), metrics: nil, views: ["view": view]))
+        let top = view.topAnchor.constraint(equalTo: self.topAnchor)
+        let leading = view.leadingAnchor.constraint(equalTo: self.leadingAnchor)
+        let trailing = self.trailingAnchor.constraint(equalTo: view.trailingAnchor)
+        let bottom = self.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+        NSLayoutConstraint.activate([top, leading, trailing, bottom])
     }
 }
